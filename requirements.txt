@@ -7,3 +7,4 @@ seaborn
 scikit-learn
 streamlit-option-menu
 imblearn
+category_encoders
