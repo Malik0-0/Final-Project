@@ -4,11 +4,9 @@ import numpy as np
 import joblib
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.metrics import fbeta_score
+from sklearn.metrics import fbeta_score, confusion_matrix
 from sklearn.metrics import make_scorer
 from streamlit_option_menu import option_menu
-from sklearn.inspection import PartialDependenceDisplay
-from sklearn.inspection import permutation_importance
 
 # Set Streamlit page configuration to wide layout
 st.set_page_config(page_title="Auto Insurance Response Prediction", layout="wide")
@@ -26,371 +24,110 @@ def load_new_obs():
     new_obs = pd.read_csv('new_obs_unseen_dummy3.csv')
     return new_obs
 
-# Visualize data
-def visualize_data(data):
-    # Embed Tableau Dashboard
-    st.subheader('Interactive Tableau Dashboard')
-    tableau_html = """
-    <div style='display: flex; justify-content: center; align-items: center;'>
-        <div class='tableauPlaceholder' id='viz1724436836867' style='position: relative; width: 100%; max-width: 1000px;'>
-            <noscript>
-                <a href='#'>
-                    <img alt='Page 1' src='https://public.tableau.com/static/images/Au/AutoInsuranceDashboard_17241501812520/Page1/1_rss.png' style='border: none; width: 100%;' />
-                </a>
-            </noscript>
-            <object class='tableauViz' style='display:none; width: 100%;'>
-                <param name='host_url' value='https%3A%2F%2Fpublic.tableau.com%2F' /> 
-                <param name='embed_code_version' value='3' />
-                <param name='site_root' value='' />
-                <param name='name' value='AutoInsuranceDashboard_17241501812520&#47;Page1' />
-                <param name='tabs' value='no' />
-                <param name='toolbar' value='yes' />
-                <param name='static_image' value='https://public.tableau.com/static/images/Au/AutoInsuranceDashboard_17241501812520/Page1/1.png' />
-                <param name='animate_transition' value='yes' />
-                <param name='display_static_image' value='yes' />
-                <param name='display_spinner' value='yes' />
-                <param name='display_overlay' value='yes' />
-                <param name='display_count' value='yes' />
-                <param name='language' value='en-US' />
-            </object>
-        </div>
-    </div>
-    <script type='text/javascript'>                    
-        var divElement = document.getElementById('viz1724436836867');                    
-        var vizElement = divElement.getElementsByTagName('object')[0];                    
-        if ( divElement.offsetWidth > 800 ) { 
-            vizElement.style.width='1000px';vizElement.style.height='850px';
-        } else if ( divElement.offsetWidth > 500 ) { 
-            vizElement.style.width='1000px';vizElement.style.height='850px';
-        } else { 
-            vizElement.style.width='100%';vizElement.style.height='2777px';
-        }                     
-        var scriptElement = document.createElement('script');                    
-        scriptElement.src = 'https://public.tableau.com/javascripts/api/viz_v1.js';                    
-        vizElement.parentNode.insertBefore(scriptElement, vizElement);                
-    </script>
-    """
-    st.components.v1.html(tableau_html, height=850)
-
-    st.subheader('Dataset Overview')
-    st.dataframe(data.head())
-    
-    st.subheader('Data Description')
-    st.write(data.describe())
-    
-    # 1. Distribution of Numerical Columns
-    st.subheader('Distribution of Numerical Features')
-    numerical_features = ['Customer Lifetime Value', 'Income', 'Total Claim Amount', 'Monthly Premium Auto']
-    for feature in numerical_features:
-        st.write(f'Distribution of {feature}')
-        with st.markdown('<div class="plot-container">', unsafe_allow_html=True):
-            fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-            sns.histplot(data[feature], kde=True, ax=ax[0])
-            ax[0].set_title(f'Histogram of {feature}')
-            sns.boxplot(x=data[feature], ax=ax[1])
-            ax[1].set_title(f'Boxplot of {feature}')
-            st.pyplot(fig)
-
-    # 2. Correlation Analysis with Response
-    st.subheader('Correlation with Response')
-    for feature in numerical_features:
-        st.write(f'Scatter plot between {feature} and Response')
-        with st.markdown('<div class="plot-container">', unsafe_allow_html=True):
-            fig, ax = plt.subplots(figsize=(10, 5))
-            sns.scatterplot(x=data[feature], y=data['Response'], ax=ax)
-            ax.set_title(f'Relationship between {feature} and Response')
-            st.pyplot(fig)
-
-    # Correlation Heatmap
-    st.subheader('Correlation Heatmap')
-    numerical_data = data.select_dtypes(include=[np.number])
-    corr = numerical_data.corr()
-    with st.markdown('<div class="plot-container">', unsafe_allow_html=True):
-        fig, ax = plt.subplots(figsize=(10, 5))
-        sns.heatmap(corr, annot=True, cmap='coolwarm', ax=ax)
-        st.pyplot(fig)
-    
-    # 3. Distribution of Policyholders by State
-    st.subheader('Distribution of Policyholders by State')
-    with st.markdown('<div class="plot-container">', unsafe_allow_html=True):
-        fig, ax = plt.subplots(figsize=(10, 5))
-        sns.countplot(y='State', data=data, ax=ax, order=data['State'].value_counts().index)
-        ax.set_title('Number of Policyholders by State')
-        st.pyplot(fig)
-
-    # 4. Education Level Segmentation
-    st.subheader('Education Level Segmentation')
-    with st.markdown('<div class="plot-container">', unsafe_allow_html=True):
-        fig, ax = plt.subplots(figsize=(10, 5))
-        sns.countplot(x='Education', data=data, order=data['Education'].value_counts().index, ax=ax)
-        ax.set_title('Distribution of Education Levels')
-        st.pyplot(fig)
-
-    # 5. Purchase Timing (using Effective To Date if available)
-    st.subheader('Timing of Insurance Purchases')
-    if 'Effective To Date' in data.columns:
-        data['Effective To Date'] = pd.to_datetime(data['Effective To Date'])
-        data['Purchase Month'] = data['Effective To Date'].dt.month
-        with st.markdown('<div class="plot-container">', unsafe_allow_html=True):
-            fig, ax = plt.subplots(figsize=(10, 5))
-            sns.countplot(x='Purchase Month', data=data, ax=ax)
-            ax.set_title('Number of Purchases by Month')
-            st.pyplot(fig)
-
-    # 6. Gender Proportion
-    st.subheader('Gender Proportion')
-    with st.markdown('<div class="plot-container">', unsafe_allow_html=True):
-        fig, ax = plt.subplots(figsize=(10, 5))
-        sns.countplot(x='Gender', data=data, ax=ax)
-        ax.set_title('Gender Distribution')
-        st.pyplot(fig)
-
-    # 7. Distribution by Police District
-    st.subheader('Distribution by Police District')
-    if 'Police District' in data.columns:
-        with st.markdown('<div class="plot-container">', unsafe_allow_html=True):
-            fig, ax = plt.subplots(figsize=(10, 5))
-            sns.countplot(y='Police District', data=data, ax=ax, order=data['Police District'].value_counts().index)
-            ax.set_title('Number of Policyholders by Police District')
-            st.pyplot(fig)
-
-    # 8. Marital Status Distribution
-    st.subheader('Marital Status Distribution')
-    with st.markdown('<div class="plot-container">', unsafe_allow_html=True):
-        fig, ax = plt.subplots(figsize=(10, 5))
-        sns.countplot(x='Marital Status', data=data, ax=ax)
-        ax.set_title('Marital Status of Policyholders')
-        st.pyplot(fig)
-
-    # 9. Policy Types Distribution
-    st.subheader('Policy Types Distribution')
-    with st.markdown('<div class="plot-container">', unsafe_allow_html=True):
-        fig, ax = plt.subplots(figsize=(10, 5))
-        sns.countplot(x='Policy Type', data=data, ax=ax)
-        ax.set_title('Distribution of Policy Types')
-        st.pyplot(fig)
-
-    # 10. Renewal Offers
-    st.subheader('Renewal Offers Distribution')
-    with st.markdown('<div class="plot-container">', unsafe_allow_html=True):
-        fig, ax = plt.subplots(figsize=(10, 5))
-        sns.countplot(x='Renew Offer Type', data=data, ax=ax)
-        ax.set_title('Renew Offer Types Frequency')
-        st.pyplot(fig)
-
-    # 11. Sales Channels
-    st.subheader('Sales Channels Distribution')
-    with st.markdown('<div class="plot-container">', unsafe_allow_html=True):
-        fig, ax = plt.subplots(figsize=(10, 5))
-        sns.countplot(x='Sales Channel', data=data, ax=ax)
-        ax.set_title('Sales Channel Usage')
-        st.pyplot(fig)
-
-    # 12. Vehicle Types
-    st.subheader('Vehicle Types Distribution')
-    with st.markdown('<div class="plot-container">', unsafe_allow_html=True):
-        fig, ax = plt.subplots(figsize=(10, 5))
-        sns.countplot(x='Vehicle Class', data=data, ax=ax)
-        ax.set_title('Distribution of Vehicle Types')
-        st.pyplot(fig)
-
-    # 13. Vehicle Sizes
-    st.subheader('Vehicle Sizes Distribution')
-    with st.markdown('<div class="plot-container">', unsafe_allow_html=True):
-        fig, ax = plt.subplots(figsize=(10, 5))
-        sns.countplot(x='Vehicle Size', data=data, ax=ax)
-        ax.set_title('Distribution of Vehicle Sizes')
-        st.pyplot(fig)
-
-    # 14. Coverage Types
-    st.subheader('Coverage Types Distribution')
-    with st.markdown('<div class="plot-container">', unsafe_allow_html=True):
-        fig, ax = plt.subplots(figsize=(10, 5))
-        sns.countplot(x='Coverage', data=data, ax=ax)
-        ax.set_title('Distribution of Coverage Types')
-        st.pyplot(fig)
-
-    # 15. Relationship Between Categorical Features and Response
-    st.subheader('Relationship Between Categorical Features and Response')
-    categorical_features = ['State', 'Education', 'EmploymentStatus', 'Policy Type', 'Renew Offer Type', 'Sales Channel', 'Vehicle Class', 'Vehicle Size', 'Coverage', 'Gender', 'Marital Status']
-    for feature in categorical_features:
-        st.write(f'Impact of {feature} on Response')
-        with st.markdown('<div class="plot-container">', unsafe_allow_html=True):
-            fig, ax = plt.subplots(figsize=(10, 5))
-            sns.countplot(x=feature, hue='Response', data=data, ax=ax)
-            ax.set_title(f'Relationship between {feature} and Response')
-            st.pyplot(fig)
-
-    # 16. Ratio of Each Feature to the Response and Segmentation Analysis
-    st.subheader('Ratio and Segmentation Analysis')
-    for feature in categorical_features:
-        st.write(f'Ratio of {feature} Categories to Response')
-        feature_response_ratio = data.groupby(feature)['Response'].value_counts(normalize=True).unstack().fillna(0)
-        with st.markdown('<div class="plot-container">', unsafe_allow_html=True):
-            fig, ax = plt.subplots(figsize=(10, 5))
-            feature_response_ratio.plot(kind='bar', stacked=True, ax=ax)
-            ax.set_title(f'Segmentation Analysis: {feature}')
-            ax.set_ylabel('Proportion of Response')
-            st.pyplot(fig)
-
-
-# Preprocess data to match training
-def preprocess_data(df):
-    df = df.drop(columns=['Customer', 'Effective To Date', 'unnamed: 0'], errors='ignore')
-    df['CLV_log'] = np.log1p(df['Customer Lifetime Value'])
-    df['Income_Log'] = np.log1p(df['Income'])
-    df['TCA_Log'] = np.log1p(df['Total Claim Amount'])
-    df = df.drop(columns=['Customer Lifetime Value', 'Income', 'Total Claim Amount'], errors='ignore')
-    return df
-
-def f2_score(y_true, y_pred):
-    return fbeta_score(y_true, y_pred, beta=2)
-
-f2_scorer = make_scorer(f2_score)
-
-# Model Explanation with Permutation Importance
+# Model Explanation with Interpretation and Hypothetical Cost Analysis
 def explain_model(model, X_train):
-    st.subheader('Model Explanation: Permutation Importance')
-    
-    # Preprocess data
-    X_train_processed = preprocess_data(X_train)
-    
-    # Ensure consistent label types
-    y_train = X_train_processed['Response'].map({'Yes': 1, 'No': 0})
-    
-    # Prepare feature data
-    X_train_features = X_train_processed.drop(columns=['Response'])
-
-    # Compute permutation importance
-    results = permutation_importance(model, X_train_features, y_train, scoring=f2_scorer, random_state=42)
-    
-    # Get the importance values and standard deviations
-    importance = results.importances_mean
-    std = results.importances_std
-    feature_names = X_train_features.columns
-    
-    # Sort features by importance
-    sorted_idx = np.argsort(importance)[::-1]
-    
-    # Plot feature importance
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.barh(feature_names[sorted_idx], importance[sorted_idx], capsize=5)
-    ax.set_xlabel('Permutation Importance')
-    ax.set_title('Feature Importance using Permutation Importance')
-    ax.invert_yaxis()  # Most important features at the top
-    
-    # Display plot in Streamlit
-    st.pyplot(fig)
-
-    # Identify numeric and categorical features
-    numeric_features = X_train_features.select_dtypes(include=[np.number]).columns
-    categorical_features = X_train_features.select_dtypes(include=['object', 'category']).columns
-
-    # Select top 3 numeric features for PDP
-    top_numeric_features = [feature for feature in feature_names[sorted_idx] if feature in numeric_features][:3]
-
-    st.subheader('Partial Dependence Plots for Top Numeric Features')
-    if top_numeric_features:
-        st.write('Visualizing the impact of key numeric features on model predictions.')
-        # Create PDP plots for selected top numeric features
-        fig, ax = plt.subplots(figsize=(12, 8))
-        display = PartialDependenceDisplay.from_estimator(model, X_train_features, top_numeric_features, ax=ax)
-        plt.suptitle('Partial Dependence Plots')
-        plt.subplots_adjust(top=0.9)
-        plt.show()
-        
-        # Display PDP plot in Streamlit
-        st.pyplot(fig)
-    else:
-        st.write('No numeric features found for Partial Dependence Plots.')
-
-    # Select top 3 categorical features
-    top_categorical_features = [feature for feature in feature_names[sorted_idx] if feature in categorical_features][:3]
-
-    st.subheader('Insights for Top Categorical Features')
-    if top_categorical_features:
-        st.write('Visualizing the impact of key categorical features on model predictions.')
-        
-        # Create subplots for top categorical features
-        num_cats = len(top_categorical_features)
-        fig, axes = plt.subplots(1, num_cats, figsize=(5 * num_cats, 6), sharey=True)
-        
-        for i, feature in enumerate(top_categorical_features):
-            ax = axes[i] if num_cats > 1 else axes
-            X_train_features[feature].value_counts().plot(kind='bar', ax=ax)
-            ax.set_title(f'Distribution of {feature}')
-            ax.set_xlabel('Category')
-            ax.set_ylabel('Frequency')
-        
-        plt.tight_layout()
-        st.pyplot(fig)
-    else:
-        st.write('No categorical features found for analysis.')
-
-    # Interpretation
-    st.subheader('Interpretation')
+    st.subheader('Model Explanation')
     st.markdown("""
-    **Permutation Importance**
-    **Key Feature Insights**:
-
-    - **Renew Offer Type**: The most important feature, indicating that customers are highly sensitive to the type of renewal offers they receive. Offering attractive renewal options can greatly influence customer retention. The high frequency of "Offer1" suggests it is the most preferred, so optimizing and testing different renewal strategies similar to "Offer1" could further enhance retention.
-
-    - **Sales Channel**: The second most influential feature, showing that the method of selling insurance has a significant impact on customer response. The predominance of agent-led sales suggests customers value personalized service. Investing in training for sales agents and optimizing branch operations could boost engagement and conversion rates.
-
-    - **Education**: Indicates that educational background affects how customers respond to insurance offerings. Higher education levels may correlate with a better understanding of insurance products, suggesting a need for tailored communication strategies. Aligning messages to resonate with customers' education levels could improve engagement and conversion.
-
-    - **Employment Status**: Affects customer behavior, with different employment statuses influencing response rates. Personalized marketing strategies based on employment status (e.g., employed, retired) could increase engagement and relevance of offers.
-
-    - **Coverage**: The type of coverage selected is critical, indicating customers' varying needs and risk perceptions. Providing clear, detailed information on the benefits of different coverage options can help customers make informed choices, leading to higher conversion rates.
-
-    - **Gender**: Gender differences in response indicate opportunities for gender-specific marketing strategies, catering to the unique needs and preferences of each demographic.
-
-    - **Number of Policies**: The partial dependence plot shows that customers with more policies may respond less favorably, possibly due to increased complexity or cost. Simplifying offerings or providing bundled policy options could retain these customers.
-
-    - **Vehicle Size**: The impact of vehicle size on customer response points to differing needs based on vehicle type. Tailoring insurance products to cater to specific vehicle types can enhance relevance and attractiveness.
-
-    **Partial Dependence Plots**
-    
-    <br>**Insights for Top Categorical Features**:
-
-    - **Renew Offer Type**: The distribution shows a preference for "Offer1" and "Offer2", highlighting the importance of these offers in retaining customers. Continuously innovating and optimizing these offers can help maintain customer loyalty.
-
-    - **Sales Channel**: With agents being the most popular channel, focusing on agent training and performance can significantly impact customer acquisition and satisfaction. Exploring opportunities to enhance other channels like online and call centers could diversify and strengthen sales strategies.
-
-    - **Education**: The distribution shows a concentration in Bachelor's and College-level education, indicating that these customers may value detailed, clear information. Crafting educational content and offers that resonate with these segments can improve engagement.
-    
-    **Insights for Top Numerical Features**:
-
-    - **Number of Policies**: Customers with a higher number of policies show a decreasing response, suggesting that managing multiple policies could be a barrier. Streamlining policy management or offering discounts for multi-policy holders might improve satisfaction.
-
-    - **Months Since Policy Inception**: Customers' responses vary with the duration of their policy, indicating key engagement moments. Utilizing these insights to schedule proactive communication can enhance customer retention.
-
-    - **CLV_log (Customer Lifetime Value log)**: Variations in customer lifetime value impact response, suggesting that high-value customers may require different engagement strategies. Tailoring offers to match lifetime value can maximize customer loyalty and profitability.
-
-    **Model Impact**:
-
-    - **Predictive Accuracy**: The strong performance of features like Renew Offer Type and Sales Channel indicates that the model accurately predicts customer behavior based on these factors. This builds confidence in using the model for decision-making.
-
-    - **Generalizability**: The insights into both numeric and categorical features provide a well-rounded understanding, helping the model adapt to different customer segments and data variations, enhancing its robustness.
-
-    **Business Impact**:
-
-    - **Customer Retention**: By focusing on top features like renew offer types and optimizing sales channels, businesses can improve customer retention and satisfaction. Implementing targeted renewal offers and analyzing channel performance can lead to strategic adjustments.
-
-    - **Sales Optimization**: Insights from feature importance can guide strategic investments in high-performing sales channels and coverage types, improving marketing and sales efficiency.
-
-    - **Targeted Marketing**: Understanding customer education, employment status, and gender allows for more targeted marketing efforts, increasing engagement and conversion rates.
-
-    - **Product Development**: Insights into features like vehicle size and the number of policies can drive innovation in product offerings, catering to specific customer segments and enhancing market positioning.
-
-    - **Managing Uncertainty**: The error bars in the permutation importance plot indicate some uncertainty. This variability should be considered, especially for features with larger error bars, and further analysis might be needed to refine these insights.
-
-    - **Interaction Effects**: While these plots provide a global view, potential interactions between features may not be fully captured. Further analysis using advanced techniques like SHAP or 2D PDPs can explore these interactions.
-
-    **Final Note**:
-    - **Iterative Analysis**: This interpretation should be part of an iterative process, continuously refining insights based on new data and evolving business needs. Regularly updating the model and analysis will help maintain alignment with business goals and market dynamics.
+    This section provides an interpretation of the model's performance and a hypothetical cost analysis based on the predicted outcomes.
     """)
+
+    # Helper function to convert image to base64
+    import base64
+
+    def convert_image_to_base64(image_path):
+        with open(image_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode()
+
+    st.markdown(
+        """
+        <div style="text-align: center;">
+            <img src="data:image/jpg;base64,{}" alt="ConfusionMatrix" width="600">
+        </div>
+        """.format(convert_image_to_base64("C:/Users/Hadi/Desktop/ConfusionMatrix.jpg")),
+        unsafe_allow_html=True
+    )
+
+    st.markdown("""
+    ## Interpretation and Hypothetical Cost Analysis
+
+    If the model were used to filter potential customers to determine who would receive a "Yes" response, it would successfully predict 95% of the "Yes" responses (recall), and 90% of the "No" responses would be correctly filtered out. The precision of 61% indicates that when the model predicts a "Yes" response, it is correct 61% of the time, meaning that there is still a 39% chance of incorrectly predicting a "No" response as "Yes."
+    """)
+
+    st.markdown("""
+    ### Hypothetical Cost Analysis:
+
+    Given the classification report and confusion matrix, let's explore a cost scenario that accurately reflects the actual model's performance.
+
+    **Assumptions:**
+
+    - **Revenue gain from every 50 points in CLV:** $1
+    - **Total Number of Customers:** 1462
+    - **True Positives Data:** 199
+    - **False Positives Data:** 128
+    - **False Negatives Data::** 199
+    """)
+
+    st.markdown("""
+    ### Without the Model [TP + FN]:
+    - **Correctly Approached "Yes" Responses:** 209 (Total actual "Yes" responses)
     
+    ### With the Model [TP + FP]:
+
+    - **Predicted "Yes" Responses (True Positive):** 199
+    - **Incorrectly Predicted "Yes" Responses (False Positives):** 128
+                
+    ### Revenue gain
+    Gaining Revenue = model_revenue - revenue_without_model
+    Gaining Revenue = 20474
+                
+    Percentage gaining revenue = (diff_rev/revenue_without_model)*100
+    Percentage gaining revenue = 60.91%
+    
+    ### Summary of Revenue
+    - **Without model (TP + FN): $33610**
+    - **With model (TP + FP): $54084** 
+    - **Difference:** $54084 - $33610 = **$20474**
+    - **Percentage Revenue:** ($20474 / $33610) * 100 = **60.91%**
+
+    Implementing the model resulted in a significant revenue increase, with total earnings rising from $33,610 (without the model) to $54,084 (with the model). This represents a difference of $20,474, translating to a 60.91% increase in revenue, highlighting the model's effectiveness in boosting financial performance.
+    """)
+
+    st.markdown("""
+    ## Recommendations for Business and Project Model
+    ------
+    ### Business Recommendations
+
+    1. **Targeted Strategy for Policyholder Growth:**
+       - **Leverage the Model for Accurate Targeting:** Implement the KNN model to accurately identify and target customers who are likely to renew their policies. By focusing on these potential policyholders, the company can significantly increase the number of renewals, leading to substantial revenue growth.
+       - **Maximize Policyholder Retention:** The model's ability to correctly predict renewals allows the company to enhance its retention efforts, ensuring that more customers choose to extend their policies. This increase in retained customers directly contributes to higher revenue.
+
+    2. **Revenue Enhancement:**
+       - **Achieve Substantial Revenue Gains:** The implementation of the model has demonstrated a significant revenue increase, with total earnings rising by 60.91%. This growth reflects the model's effectiveness in accurately identifying potential renewals and converting them into actual revenue.
+       - **Focus on High-Impact Opportunities:** By concentrating efforts on customers identified by the model as likely to renew, the company can maximize revenue potential and achieve a higher return on investment.
+
+    3. **Ongoing Model Optimization:**
+       - **Continuous Model Refinement:** Regularly monitor and refine the model to ensure its ongoing accuracy in predicting policy renewals. As the model continues to evolve with new data, it will maintain its effectiveness in driving revenue growth.
+       - **Adapt to Customer Behavior:** Stay responsive to changes in customer behavior by incorporating new insights into the model. This adaptability will help sustain revenue increases over time by ensuring that the company continues to target the most promising policyholders.
+
+    ### Project Model Recommendations
+
+    1. **Model Implementation:**
+       - **Deploy the Model in Production ([Notebook](https://github.com/PurwadhikaDev/IgniteGroup_DTI_01_FinalProject/blob/main/Modeling_Auto%20Insurance_Ignite.ipynb)):** Integrate the KNN model into your customer relationship management (CRM) system or marketing automation platform. Ensure seamless integration so that predictions can be used to inform real-time marketing decisions.
+       - **Conduct A/B Testing ([Notebook](https://github.com/PurwadhikaDev/IgniteGroup_DTI_01_FinalProject/blob/main/Prediction%20AB%20Test_Auto%20Insurance_Ignite.ipynb)):** Perform A/B testing to compare the performance of the model-based approach against traditional marketing methods. This will provide empirical evidence of the model’s effectiveness and help justify its use.
+
+    2. **Data Management:**
+       - **Maintain Data Quality:** Ensure high-quality and up-to-date data for the model to function effectively. Regularly clean and preprocess the data to avoid inaccuracies that could affect model performance.
+       - **Expand Data Sources:** Consider incorporating additional data sources to enhance the model’s predictions. This could include behavioral data, social media interactions, or external market trends.
+
+    3. **Evaluation and Metrics:**
+       - **Track Key Performance Indicators (KPIs):** Monitor KPIs such as precision, recall, and overall accuracy to assess the model’s impact on marketing outcomes. Evaluate these metrics regularly to ensure the model continues to meet business objectives.
+       - **Analyze Model Impact:** Use detailed analyses and reports to understand the model’s impact on marketing efficiency and customer engagement. Share insights with stakeholders to demonstrate the value and drive data-driven decision-making.
+
+    4. **Risk Management:**
+       - **Address False Positives:** Develop strategies to manage the impact of false positives (incorrect "Yes" predictions) and mitigate any potential negative effects on customer experience or resource allocation.
+       - **Prepare for Model Limitations:** Acknowledge that no model is perfect. Be prepared for scenarios where the model’s predictions may not align with actual outcomes and have contingency plans in place.
+    """)
+
 def single_prediction(data):
     # Initialize session state variables if they do not exist
     if 'form_page' not in st.session_state:
@@ -402,8 +139,6 @@ def single_prediction(data):
 
     def go_to_next_page(next_page):
         st.session_state['form_page'] = next_page
-
-    st.subheader('Make a Prediction')
 
     if st.session_state['form_page'] == 'customer_segmentation':
         with st.form(key='customer_segmentation_form'):
@@ -576,11 +311,8 @@ def single_prediction(data):
             go_to_next_page('insurance_details')
 
     elif st.session_state['form_page'] == 'results_visualization':
-        st.subheader('Prediction Results and Analysis')
-        
         if st.session_state['input_df'] is not None and st.session_state['prediction_result'] is not None:
             prediction = st.session_state['prediction_result']
-            st.write(f'The model predicts: {"Yes" if prediction == 1 else "No" if prediction == 0 else "Error"}')
 
             # Display User Input Overview in Tables
             st.subheader('User Input Overview')
@@ -603,6 +335,12 @@ def single_prediction(data):
                 policy_inputs = st.session_state['policy_inputs']
                 policy_df = pd.DataFrame.from_dict(policy_inputs, orient='index', columns=['Value'])
                 st.table(policy_df)
+            
+            # Create a table to show the prediction result
+            st.subheader('Model Prediction')
+            prediction_result = {"Output": ["Yes" if prediction == 1 else "No" if prediction == 0 else "Error"]}
+            prediction_df = pd.DataFrame.from_dict(prediction_result, orient='index', columns=['Prediction'])
+            st.table(prediction_df)
 
         else:
             st.write("Please complete the prediction process before viewing the results.")
@@ -619,32 +357,52 @@ def batch_prediction():
         batch_data = pd.read_csv(uploaded_file)
         
         # Drop unnecessary columns
-        batch_data = batch_data.drop(columns=['Customer', 'Effective To Date'])
+        batch_data = batch_data.drop(columns=['Customer', 'Effective To Date', 'Unnamed: 0'], errors='ignore')
         
         # Mapping 'Yes'/'No' to 1/0 in the Response column (if applicable)
         if 'Response' in batch_data.columns:
             batch_data['Response'] = batch_data['Response'].map({'Yes': 1, 'No': 0}).astype(float)
         
-        # Applying logarithmic transformation
+        # Applying logarithmic transformation for prediction purposes
         if 'Customer Lifetime Value' in batch_data.columns:
             batch_data['CLV_log'] = np.log1p(batch_data['Customer Lifetime Value'])
-            batch_data = batch_data.drop(columns=['Customer Lifetime Value'])
         if 'Income' in batch_data.columns:
             batch_data['Income_Log'] = np.log1p(batch_data['Income'])
-            batch_data = batch_data.drop(columns=['Income'])
         if 'Total Claim Amount' in batch_data.columns:
             batch_data['TCA_Log'] = np.log1p(batch_data['Total Claim Amount'])
-            batch_data = batch_data.drop(columns=['Total Claim Amount'])
         
-        # Ensure the columns are in the correct order by matching training data
-        # Adjust based on actual model features used
-        model_features = [col for col in batch_data.columns if col != 'Response']
-        batch_data = batch_data[model_features]
+        # Prepare features for prediction by excluding original columns
+        model_features = batch_data.drop(columns=['Customer Lifetime Value', 'Income', 'Total Claim Amount'], errors='ignore')
 
         if st.button('Predict'):
-            batch_predictions = treated_model.predict(batch_data)
-            st.write("Batch Predictions:")
-            st.write(batch_predictions)
+            # Perform predictions
+            batch_predictions = treated_model.predict(model_features)
+            
+            # Prepare a DataFrame to show the results
+            results_df = batch_data.copy()
+            results_df['Prediction'] = batch_predictions
+
+            # Map numeric predictions back to 'Yes'/'No'
+            results_df['Prediction'] = results_df['Prediction'].map({1: 'Yes', 0: 'No'})
+
+            # Add a count column for pivoting
+            results_df['Count'] = 1
+
+            # Create a pivot table that categorizes the data based on the prediction
+            pivot_table = results_df.pivot_table(index=['Prediction'], values=['Count'], aggfunc='count')
+            
+            # Display the count of each prediction
+            st.write("Summary of Batch Predictions (Pivot Table):")
+            st.dataframe(pivot_table)
+            
+            # Exclude the log-transformed columns from the detailed view
+            detailed_columns = [col for col in results_df.columns if col not in ['CLV_log', 'Income_Log', 'TCA_Log', 'Count']]
+            
+            # Prepare categorized data without log-transformed columns and without repeating the 'Prediction' column
+            categorized_data = results_df[detailed_columns].groupby('Prediction').apply(lambda x: x.drop(columns=['Prediction']).reset_index(drop=True))
+            
+            st.write("Detailed Batch Predictions:")
+            st.dataframe(categorized_data)
     else:
         st.write("Please upload a CSV file for batch prediction.")
 
@@ -653,8 +411,8 @@ def main():
     # Navigation
     selected_page = option_menu(
         menu_title="Auto Insurance Response Prediction", 
-        options=["Home", "Data Visualization", "Single Prediction", "Batch Prediction", "Model Explanation"], 
-        icons=["house", "bar-chart", "robot", "archive", "info-circle"], 
+        options=["Home", "Single Prediction", "Batch Prediction", "Model Explanation"], 
+        icons=["house", "robot", "archive", "info-circle"], 
         menu_icon="tools", 
         default_index=0, 
         orientation="horizontal"
@@ -681,24 +439,61 @@ def main():
         This project aims to enhance the decision-making process in auto insurance through predictive analytics. Our model predicts whether customers will respond positively to different insurance offerings, helping the business optimize customer engagement and retention strategies.
         """)
 
-        # Purpose of the Model
-        st.subheader('Purpose of the Model')
-        st.markdown("""
-        The primary goal of this model is to predict customer responses to auto insurance offers. By understanding which factors influence customer decisions, the business can tailor its offerings to improve conversion rates and customer satisfaction.
-        """)
+        # Embed Tableau Dashboard
+        tableau_html = """
+        <div style='display: flex; justify-content: center; align-items: center;'>
+            <div class='tableauPlaceholder' id='viz1724436836867' style='position: relative; width: 100%; max-width: 1000px;'>
+                <noscript>
+                    <a href='#'>
+                        <img alt='Page 1' src='https://public.tableau.com/static/images/Au/AutoInsuranceDashboard_17241501812520/Page1/1_rss.png' style='border: none; width: 100%;' />
+                    </a>
+                </noscript>
+                <object class='tableauViz' style='display:none; width: 100%;'>
+                    <param name='host_url' value='https%3A%2F%2Fpublic.tableau.com%2F' /> 
+                    <param name='embed_code_version' value='3' />
+                    <param name='site_root' value='' />
+                    <param name='name' value='AutoInsuranceDashboard_17241501812520&#47;Page1' />
+                    <param name='tabs' value='no' />
+                    <param name='toolbar' value='yes' />
+                    <param name='static_image' value='https://public.tableau.com/static/images/Au/AutoInsuranceDashboard_17241501812520/Page1/1.png' />
+                    <param name='animate_transition' value='yes' />
+                    <param name='display_static_image' value='yes' />
+                    <param name='display_spinner' value='yes' />
+                    <param name='display_overlay' value='yes' />
+                    <param name='display_count' value='yes' />
+                    <param name='language' value='en-US' />
+                </object>
+            </div>
+        </div>
+        <script type='text/javascript'>                    
+            var divElement = document.getElementById('viz1724436836867');                    
+            var vizElement = divElement.getElementsByTagName('object')[0];                    
+            if ( divElement.offsetWidth > 800 ) { 
+                vizElement.style.width='1000px';vizElement.style.height='850px';
+            } else if ( divElement.offsetWidth > 500 ) { 
+                vizElement.style.width='1000px';vizElement.style.height='850px';
+            } else { 
+                vizElement.style.width='100%';vizElement.style.height='2777px';
+            }                     
+            var scriptElement = document.createElement('script');                    
+            scriptElement.src = 'https://public.tableau.com/javascripts/api/viz_v1.js';                    
+            vizElement.parentNode.insertBefore(scriptElement, vizElement);                
+        </script>
+        """
+        st.components.v1.html(tableau_html, height=850)
 
-        # Motivation and Benefits
-        st.subheader('Motivation and Benefits')
+        # Data and Features
+        st.subheader('Data and Features')
         st.markdown("""
-        - **Improved Customer Retention**: By identifying key factors that drive customer responses, we can design targeted strategies to retain more customers.
-        - **Sales Optimization**: Understanding the most effective sales channels and offers enables the business to allocate resources more efficiently.
-        - **Enhanced Customer Satisfaction**: Tailoring insurance products to match customer needs and preferences improves overall satisfaction and loyalty.
+        - ([EDA Notebook](https://github.com/PurwadhikaDev/IgniteGroup_DTI_01_FinalProject/blob/main/EDA_Auto%20Insurance_Ignite.ipynb))
+        - ([Modeling Notebook](https://github.com/PurwadhikaDev/IgniteGroup_DTI_01_FinalProject/blob/main/Modeling_Auto%20Insurance_Ignite.ipynb))
         """)
-
-        # How the Model Works
-        st.subheader('How the Model Works')
         st.markdown("""
-        Our model uses machine learning techniques, specifically a pipeline model including feature transformations and classifiers. Key features such as 'Renew Offer Type', 'Sales Channel', and 'Education' are analyzed to predict customer responses. The model is trained on historical data and uses feature importance and partial dependence plots for interpretation.
+        The model is built using data from customer demographics, policy details, and historical response behavior. Important features include:
+        - **Renew Offer Type**: The type of renewal offer received by the customer.
+        - **Sales Channel**: The channel through which the policy was sold.
+        - **Education**: The educational background of the customer.
+        These features help in understanding customer behavior and preferences.
         """)
 
         # Convert 'Effective To Date' to datetime with flexible parsing
@@ -732,15 +527,6 @@ def main():
         # Use the function to generate the markdown
         feature_explanations = generate_feature_explanation(data, exclude_columns)
 
-        # Display the markdown in Streamlit
-        st.subheader('Data and Features')
-        st.markdown("""
-        The model is built using data from customer demographics, policy details, and historical response behavior. Important features include:
-        - **Renew Offer Type**: The type of renewal offer received by the customer.
-        - **Sales Channel**: The channel through which the policy was sold.
-        - **Education**: The educational background of the customer.
-        These features help in understanding customer behavior and preferences.
-        """)
         st.markdown("""
         Features Input Limitation:
         """)
@@ -772,12 +558,10 @@ def main():
         # Usage Instructions
         st.subheader('Usage Instructions')
         st.markdown("""
-        - **Data Visualization**: Explore various charts and graphs that provide insights into the dataset. This includes visualizations of key metrics, feature distributions, correlations between variables, and class imbalances. Use these tools to better understand the underlying patterns and trends in the data.
         - **Single Prediction**: Use the form to input individual customer data and receive a prediction on their likelihood to respond positively to an insurance offer. This feature allows for personalized insights based on specific customer information.
         - **Batch Prediction**: Upload a CSV file containing multiple customer records to generate predictions for each record simultaneously. This feature is useful for analyzing and predicting customer behavior in bulk, making it easier to implement large-scale marketing and engagement strategies.
         - **Model Explanation**: Understand the inner workings of the predictive model by visualizing feature importance and partial dependence plots. This helps to see which features have the most influence on predictions and how they impact customer behavior, aiding in more informed decision-making.
         """)
-
 
         # Ethical Considerations
         st.subheader('Ethical Considerations')
@@ -793,8 +577,7 @@ def main():
         - **Real-Time Predictions**: Implementing real-time data processing to provide up-to-date predictions.
         - **Enhanced Feature Engineering**: Exploring additional features and interactions to capture more nuances in customer behavior.
         """)
-    elif st.session_state['page'] == 'Data Visualization':
-        visualize_data(data)
+
     elif st.session_state['page'] == 'Single Prediction':
         single_prediction(data)
     elif st.session_state['page'] == 'Batch Prediction':
