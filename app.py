@@ -392,7 +392,7 @@ def batch_prediction():
             pivot_table = results_df.pivot_table(index=['Prediction'], values=['Count'], aggfunc='count')
             
             # Display the count of each prediction
-            st.write("Summary of Batch Predictions (Pivot Table):")
+            st.write("Summary of Batch Predictions")
             st.dataframe(pivot_table)
             
             # Exclude the log-transformed columns from the detailed view
