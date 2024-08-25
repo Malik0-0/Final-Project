@@ -91,7 +91,7 @@ Implementing the model resulted in a significant revenue increase, with total ea
 ### *Link*
 
 1. [Tableau Dashboard](https://public.tableau.com/views/AutoInsuranceDashboard_17241501812520/Page1?:language=en-US&:sid=&:redirect=auth&:display_count=n&:origin=viz_share_link)
-2. [Dashboard Prediction Streamlit](https://final-project-pwk.streamlit.app/)
+2. [Model Deployment](https://final-project-pwk.streamlit.app/)
 
 ### Built With
 
