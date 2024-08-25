@@ -43,7 +43,7 @@ def explain_model(model, X_train):
         <div style="text-align: center;">
             <img src="data:image/jpg;base64,{}" alt="ConfusionMatrix" width="600">
         </div>
-        """.format(convert_image_to_base64("C:/Users/Hadi/Desktop/ConfusionMatrix.jpg")),
+        """.format(convert_image_to_base64("ConfusionMatrix.jpg")),
         unsafe_allow_html=True
     )
 
